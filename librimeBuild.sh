@@ -9,7 +9,12 @@ echo ${RIME_ROOT}
 cd ${RIME_ROOT}/librime
 mkdir -p build
 cd build
-cmake -G "Xcode" -DCMAKE_OSX_DEPLOYMENT_TARGET=15.0 ..
+cmake -G "Xcode" \
+      -DCMAKE_OSX_DEPLOYMENT_TARGET=15.0 \
+      -DBOOST_ROOT=${RIME_ROOT}/.boost/dest \
+      -DBOOST_INCLUDEDIR=${RIME_ROOT}/.boost/dest/include \
+      -DBOOST_LIBRARYDIR=${RIME_ROOT}/.boost/dest/lib \
+      ..
 make -j$(sysctl -n hw.ncpu)
 
 cd ${RIME_ROOT}/librime
