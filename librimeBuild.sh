@@ -5,145 +5,163 @@ RIME_ROOT="$(cd "$(dirname "$0")"; pwd)"
 
 echo ${RIME_ROOT}
 
-# 生成 Xcode 项目时指定 deployment target
-cd ${RIME_ROOT}/librime
-mkdir -p build
-cd build
-cmake -G "Xcode" \
-      -DCMAKE_SYSTEM_NAME=iOS \
-      -DCMAKE_OSX_ARCHITECTURES="arm64;x86_64" \
-      -DCMAKE_OSX_DEPLOYMENT_TARGET=15.0 \
-      -DBOOST_ROOT=/Users/runner/work/LibrimeKit/LibrimeKit/boost-iosx/dest \
-      -DBoost_NO_SYSTEM_PATHS=ON \
-      -DBoost_INCLUDE_DIR=/Users/runner/work/LibrimeKit/LibrimeKit/boost-iosx/dest/include \
-      -DBoost_LIBRARY_DIR=/Users/runner/work/LibrimeKit/LibrimeKit/boost-iosx/dest/lib \
-      ..
-make -j$(sysctl -n hw.ncpu)
-
-cd ${RIME_ROOT}/librime
-git submodule update --init
-
-if [[ ! -f ${RIME_ROOT}/librime.patch.apply ]]
-then
-    touch ${RIME_ROOT}/librime.patch.apply
-    git apply ${RIME_ROOT}/librime.patch >/dev/null 2>&1
-fi
-
-# install lua plugin
-rm -rf ${RIME_ROOT}/librime/plugins/lua
-${RIME_ROOT}/librime/install-plugins.sh imfuxiao/librime-lua@main
-
-# install charcode
-# TODO: 需要依赖 boost_locale.xcframework 而 boost_locale 依赖 icu, 在 xcode下编译失败
-# rm -rf ${RIME_ROOT}/librime/plugins/librime-charcode
-# ${RIME_ROOT}/librime/install-plugins.sh rime/librime-charcode
-# 下面记得添加 rime_require_module_charcode()
-
-# 添加lua模块依赖
-sed -i "" '/#if RIME_BUILD_SHARED_LIBS/,/#endif/c\
-#if RIME_BUILD_SHARED_LIBS\
-#define rime_declare_module_dependencies()\
-#else\
-extern void rime_require_module_core();\
-extern void rime_require_module_dict();\
-extern void rime_require_module_gears();\
-extern void rime_require_module_levers();\
-extern void rime_require_module_lua();\
-// link to default modules explicitly when building static library.\
-static void rime_declare_module_dependencies() {\
-  rime_require_module_core();\
-  rime_require_module_dict();\
-  rime_require_module_gears();\
-  rime_require_module_levers();\
-  rime_require_module_lua();\
-}\
-#endif\
-' ${RIME_ROOT}/librime/src/rime_api.cc
-
 # librime dependences build
-if [[ ! -d ${RIME_ROOT}/.boost ]]
-then
-  mkdir ${RIME_ROOT}/.boost
-  cp -R ${RIME_ROOT}/boost-iosx/dest ${RIME_ROOT}/.boost
-fi
-export BOOST_ROOT=$RIME_ROOT/.boost/dest
-make xcode/ios/deps
+export BOOST_ROOT=$RIME_ROOT/boost-iosx/boost
 
-# librime api header
-rm -rf ${RIME_ROOT}/lib && mkdir -p ${RIME_ROOT}/lib ${RIME_ROOT}/lib/headers
-cp ${RIME_ROOT}/librime/src/*.h ${RIME_ROOT}/lib/headers
+# temp directory for librime lib and headers
+RIME_LIB=${RIME_ROOT}/lib
+RIME_INCLUDE=${RIME_ROOT}/include
 
-# 设置 Deployment Target
-export IPHONEOS_DEPLOYMENT_TARGET=15.0
-export EXCLUDED_ARCHS=""
+rm -rf ${RIME_LIB} ${RIME_INCLUDE} && mkdir -p ${RIME_LIB} ${RIME_INCLUDE}
 
-# librime build
+deps=("libglog" "libleveldb" "libmarisa" "libopencc" "libyaml-cpp")
 
-# PLATFORM value means
-# OS64: to build for iOS (arm64 only)
-# OS64COMBINED: to build for iOS & iOS Simulator (FAT lib) (arm64, x86_64)
-# SIMULATOR64: to build for iOS simulator 64 bit (x86_64)
-# SIMULATORARM64: to build for iOS simulator 64 bit (arm64)
-# MAC: to build for macOS (x86_64)
-export PLATFORM=SIMULATOR64
+function prepare_library() {
+  LIBRIME_VARIANT=$1
+  LIBRIME_ROOT=${RIME_ROOT}/${LIBRIME_VARIANT}
+  LIBRIME_INCLUDE=${RIME_INCLUDE}/${LIBRIME_VARIANT}
+  cd ${LIBRIME_ROOT}
+  git submodule update --init
 
-# librime build: iOS simulator 64 bit (x86_64)
-rm -rf ${RIME_ROOT}/librime/build ${RIME_ROOT}/librime/dist
-make xcode/ios/dist
-cp -f ${RIME_ROOT}/librime/dist/lib/librime.a ${RIME_ROOT}/lib/librime_simulator_x86_64.a
+  if [[ ! -f ${RIME_ROOT}/${LIBRIME_VARIANT}.patch.apply ]]
+  then
+      touch ${RIME_ROOT}/${LIBRIME_VARIANT}.patch.apply
+      git apply ${RIME_ROOT}/librime.patch >/dev/null 2>&1
+  fi
 
-# librime build: arm64
-export PLATFORM=OS64
-rm -rf ${RIME_ROOT}/librime/build ${RIME_ROOT}/librime/dist
-make xcode/ios/dist
-cp -f ${RIME_ROOT}/librime/dist/lib/librime.a ${RIME_ROOT}/lib/librime_arm64.a
+  # install octagram plugin
+  rm -rf ${LIBRIME_ROOT}/plugins/octagram
+  ${LIBRIME_ROOT}/install-plugins.sh lotem/librime-octagram
+  (cd ${LIBRIME_ROOT}/plugins/octagram && sed -i "" 's/add_subdirectory(tools)//' CMakeLists.txt)
 
-# iOS simulator arm64 (Apple Silicon)
-export PLATFORM=SIMULATORARM64
-rm -rf ${RIME_ROOT}/librime/build ${RIME_ROOT}/librime/dist
-make xcode/ios/dist
-cp -f ${RIME_ROOT}/librime/dist/lib/librime.a ${RIME_ROOT}/lib/librime_simulator_arm64.a
+  # install lua plugin
+  rm -rf ${LIBRIME_ROOT}/plugins/lua
+  ${LIBRIME_ROOT}/install-plugins.sh imfuxiao/librime-lua@develop
 
+  rm -rf ${LIBRIME_ROOT}/plugins/predict
+  ${LIBRIME_ROOT}/install-plugins.sh imfuxiao/librime-predict@main
 
-# transform *.a to xcframework
-rm -rf ${RIME_ROOT}/Frameworks/librime.xcframework
-xcodebuild -create-xcframework \
- -library ${RIME_ROOT}/lib/librime_simulator_x86_64.a -headers ${RIME_ROOT}/lib/headers \
- -library ${RIME_ROOT}/lib/librime_arm64.a -headers ${RIME_ROOT}/lib/headers \
- -library ${RIME_ROOT}/lib/librime_simulator_arm64.a -headers ${RIME_ROOT}/lib/headers \
- -output ${RIME_ROOT}/Frameworks/librime.xcframework
+  # install charcode
+  #rm -rf ${RIME_ROOT}/librime/plugins/librime-charcode
+  #${RIME_ROOT}/librime/install-plugins.sh rime/librime-charcode
+  #extern void rime_require_module_charcode();\
+  #  rime_require_module_charcode();\
 
-# clean
-rm -rf ${RIME_ROOT}/lib/librime*.a
+  # install predict
+  # rm -rf ${LIBRIME_ROOT}/plugins/predict
+  # ${LIBRIME_ROOT}/install-plugins.sh rime/librime-predict
+  # (
+  #   cd ${LIBRIME_ROOT}/plugins/predict
+  #   sed -i '' '/add_subdirectory(tools)/d' CMakeLists.txt
+  # )
 
-# copy librime dependence lib
-cp -f ${RIME_ROOT}/librime/lib/*.a ${RIME_ROOT}/lib
+  # 添加插件模块依赖
+  sed -i "" '/#if RIME_BUILD_SHARED_LIBS/,/#endif/c\
+  #if RIME_BUILD_SHARED_LIBS\
+  void rime_declare_module_dependencies() {}\
+  #else\
+  extern void rime_require_module_core();\
+  extern void rime_require_module_dict();\
+  extern void rime_require_module_gears();\
+  extern void rime_require_module_levers();\
+  extern void rime_require_module_lua();\
+  extern void rime_require_module_octagram();\
+  extern void rime_require_module_predict();\
+  // link to default modules explicitly when building static library.\
+  void rime_declare_module_dependencies() {\
+    rime_require_module_core();\
+    rime_require_module_dict();\
+    rime_require_module_gears();\
+    rime_require_module_levers();\
+    rime_require_module_lua();\
+    rime_require_module_octagram();\
+    rime_require_module_predict();\
+  }\
+  #endif\
+  ' ${LIBRIME_ROOT}/src/rime_api.cc
 
-files=("libglog" "libleveldb" "libmarisa" "libopencc" "libyaml-cpp")
-for file in ${files[@]}
+  # build deps
+  # first time: for ios
+  # rm -rf ${LIBRIME_ROOT}/lib/*.a
+  make xcode/ios/deps/clean
+  make xcode/ios/deps
+  for file in ${deps[@]}
+  do
+    cp -f ${LIBRIME_ROOT}/lib/${file}.a ${RIME_LIB}/${file}.a
+  done
+
+  # second time: for simulator
+  # rm -rf ${LIBRIME_ROOT}/lib/*.a
+  make xcode/simulator/deps/clean
+  make xcode/simulator/deps
+  for file in ${deps[@]}
+  do
+    cp -f ${LIBRIME_ROOT}/lib/${file}.a ${RIME_LIB}/${file}_simulator.a
+  done
+
+  mkdir -p ${LIBRIME_INCLUDE}
+  cp ${LIBRIME_ROOT}/src/*.h ${LIBRIME_INCLUDE}
+
+  # librime build
+
+  # PLATFORM value means
+  # OS64: to build for iOS (arm64 only)
+  # OS64COMBINED: to build for iOS & iOS Simulator (FAT lib) (arm64, x86_64)
+  # SIMULATOR64: to build for iOS simulator 64 bit (x86_64)
+  # SIMULATORARM64: to build for iOS simulator 64 bit (arm64)
+  # MAC: to build for macOS (x86_64)
+
+  # librime build: iOS simulator 64 bit (x86_64)
+  export PLATFORM=SIMULATOR64
+  rm -rf ${LIBRIME_ROOT}/build ${LIBRIME_ROOT}/dist
+  make xcode/ios/dist
+  cp -f ${LIBRIME_ROOT}/dist/lib/librime.a ${RIME_LIB}/${LIBRIME_VARIANT}_simulator_x86_64.a
+
+  # librime build: iOS simulator 64 bit (arm64)
+  export PLATFORM=SIMULATORARM64
+  rm -rf ${LIBRIME_ROOT}/build ${LIBRIME_ROOT}/dist
+  make xcode/ios/dist
+  cp -f ${LIBRIME_ROOT}/dist/lib/librime.a ${RIME_LIB}/${LIBRIME_VARIANT}_simulator_arm64.a
+
+  # librime build: arm64
+  export PLATFORM=OS64
+  rm -rf ${LIBRIME_ROOT}/build ${LIBRIME_ROOT}/dist
+  make xcode/ios/dist
+  cp -f ${LIBRIME_ROOT}/dist/lib/librime.a ${RIME_LIB}/${LIBRIME_VARIANT}.a
+
+  # transform *.a to xcframework
+  rm -rf ${RIME_ROOT}/Frameworks/${LIBRIME_VARIANT}.xcframework
+  lipo ${RIME_LIB}/${LIBRIME_VARIANT}_simulator_x86_64.a ${RIME_LIB}/${LIBRIME_VARIANT}_simulator_arm64.a -create -output ${RIME_LIB}/${LIBRIME_VARIANT}_simulator.a
+
+  xcodebuild -create-xcframework \
+  -library ${RIME_LIB}/${LIBRIME_VARIANT}_simulator.a \
+  -headers ${LIBRIME_INCLUDE} \
+  -library ${RIME_LIB}/${LIBRIME_VARIANT}.a \
+  -headers ${LIBRIME_INCLUDE} \
+  -output ${RIME_ROOT}/Frameworks/${LIBRIME_VARIANT}.xcframework
+
+  # clean
+  rm -rf ${RIME_ROOT}/lib/${LIBRIME_VARIANT}*.a
+}
+
+prepare_library "librime"
+
+for file in ${deps[@]}
 do
-    echo "file = ${file}"
-
-    # 拆分模拟器编译文件
-    rm -rf $RIME_ROOT/lib/${file}_x86.a
-    lipo $RIME_ROOT/lib/${file}.a \
-         -thin x86_64 \
-         -output $RIME_ROOT/lib/${file}_x86.a
-
-    rm -rf $RIME_ROOT/lib/${file}_arm64.a
-    lipo $RIME_ROOT/lib/${file}.a \
-         -thin arm64 \
-         -output $RIME_ROOT/lib/${file}_arm64.a
-    
-    rm -rf $RIME_ROOT/lib/${file}_sim_arm64.a
-    lipo $RIME_ROOT/lib/${file}.a \
-        -thin arm64 \
-        -output $RIME_ROOT/lib/${file}_sim_arm64.a
-
     rm -rf ${RIME_ROOT}/Frameworks/${file}.xcframework
-    xcodebuild -create-xcframework \
-    -library ${RIME_ROOT}/lib/${file}_x86.a \
-    -library ${RIME_ROOT}/lib/${file}_arm64.a \
-    -library ${RIME_ROOT}/lib/${file}_sim_arm64.a \
-    -output ${RIME_ROOT}/Frameworks/${file}.xcframework
+
+    if [ "$file" == "libyaml-cpp" ]
+    then
+      xcodebuild -create-xcframework \
+      -library ${RIME_ROOT}/lib/${file}.a \
+      -headers ${RIME_ROOT}/librime/deps/yaml-cpp/include \
+      -library ${RIME_ROOT}/lib/${file}_simulator.a \
+      -headers ${RIME_ROOT}/librime/deps/yaml-cpp/include \
+      -output ${RIME_ROOT}/Frameworks/${file}.xcframework
+    else
+      xcodebuild -create-xcframework \
+      -library ${RIME_ROOT}/lib/${file}.a \
+      -library ${RIME_ROOT}/lib/${file}_simulator.a \
+      -output ${RIME_ROOT}/Frameworks/${file}.xcframework
+    fi
 done
