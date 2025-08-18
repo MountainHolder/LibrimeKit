@@ -58,6 +58,10 @@ make xcode/ios/deps
 rm -rf ${RIME_ROOT}/lib && mkdir -p ${RIME_ROOT}/lib ${RIME_ROOT}/lib/headers
 cp ${RIME_ROOT}/librime/src/*.h ${RIME_ROOT}/lib/headers
 
+# 设置 Deployment Target
+export IPHONEOS_DEPLOYMENT_TARGET=15.0
+export EXCLUDED_ARCHS=""
+
 # librime build
 
 # PLATFORM value means
@@ -115,10 +119,16 @@ do
     lipo $RIME_ROOT/lib/${file}.a \
          -thin arm64 \
          -output $RIME_ROOT/lib/${file}_arm64.a
+    
+    rm -rf $RIME_ROOT/lib/${file}_sim_arm64.a
+    lipo $RIME_ROOT/lib/${file}.a \
+        -thin arm64 \
+        -output $RIME_ROOT/lib/${file}_sim_arm64.a
 
     rm -rf ${RIME_ROOT}/Frameworks/${file}.xcframework
     xcodebuild -create-xcframework \
     -library ${RIME_ROOT}/lib/${file}_x86.a \
     -library ${RIME_ROOT}/lib/${file}_arm64.a \
+    -library ${RIME_ROOT}/lib/${file}_sim_arm64.a \
     -output ${RIME_ROOT}/Frameworks/${file}.xcframework
 done
