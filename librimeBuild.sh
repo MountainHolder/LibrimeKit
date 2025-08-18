@@ -6,7 +6,11 @@ RIME_ROOT="$(cd "$(dirname "$0")"; pwd)"
 echo ${RIME_ROOT}
 
 # 生成 Xcode 项目时指定 deployment target
-cmake -G "Xcode" -DCMAKE_OSX_DEPLOYMENT_TARGET=15.0 ../
+cd ${RIME_ROOT}/librime
+mkdir -p build
+cd build
+cmake -G "Xcode" -DCMAKE_OSX_DEPLOYMENT_TARGET=15.0 ..
+make -j$(sysctl -n hw.ncpu)
 
 cd ${RIME_ROOT}/librime
 git submodule update --init
