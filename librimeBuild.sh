@@ -79,11 +79,19 @@ rm -rf ${RIME_ROOT}/librime/build ${RIME_ROOT}/librime/dist
 make xcode/ios/dist
 cp -f ${RIME_ROOT}/librime/dist/lib/librime.a ${RIME_ROOT}/lib/librime_arm64.a
 
+# iOS simulator arm64 (Apple Silicon)
+export PLATFORM=SIMULATORARM64
+rm -rf ${RIME_ROOT}/librime/build ${RIME_ROOT}/librime/dist
+make xcode/ios/dist
+cp -f ${RIME_ROOT}/librime/dist/lib/librime.a ${RIME_ROOT}/lib/librime_simulator_arm64.a
+
+
 # transform *.a to xcframework
 rm -rf ${RIME_ROOT}/Frameworks/librime.xcframework
 xcodebuild -create-xcframework \
  -library ${RIME_ROOT}/lib/librime_simulator_x86_64.a -headers ${RIME_ROOT}/lib/headers \
  -library ${RIME_ROOT}/lib/librime_arm64.a -headers ${RIME_ROOT}/lib/headers \
+ -library ${RIME_ROOT}/lib/librime_simulator_arm64.a -headers ${RIME_ROOT}/lib/headers \
  -output ${RIME_ROOT}/Frameworks/librime.xcframework
 
 # clean
