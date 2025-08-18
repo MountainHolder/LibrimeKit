@@ -10,10 +10,13 @@ cd ${RIME_ROOT}/librime
 mkdir -p build
 cd build
 cmake -G "Xcode" \
+      -DCMAKE_SYSTEM_NAME=iOS \
+      -DCMAKE_OSX_ARCHITECTURES="arm64;x86_64" \
       -DCMAKE_OSX_DEPLOYMENT_TARGET=15.0 \
-      -DBOOST_ROOT=${RIME_ROOT}/.boost/dest \
-      -DBOOST_INCLUDEDIR=${RIME_ROOT}/.boost/dest/include \
-      -DBOOST_LIBRARYDIR=${RIME_ROOT}/.boost/dest/lib \
+      -DBOOST_ROOT=/Users/runner/work/LibrimeKit/LibrimeKit/boost-iosx/dest \
+      -DBoost_NO_SYSTEM_PATHS=ON \
+      -DBoost_INCLUDE_DIR=/Users/runner/work/LibrimeKit/LibrimeKit/boost-iosx/dest/include \
+      -DBoost_LIBRARY_DIR=/Users/runner/work/LibrimeKit/LibrimeKit/boost-iosx/dest/lib \
       ..
 make -j$(sysctl -n hw.ncpu)
 
