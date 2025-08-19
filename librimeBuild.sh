@@ -49,15 +49,14 @@ make xcode/ios/deps
 rm -rf ${RIME_ROOT}/lib && mkdir -p ${RIME_ROOT}/lib/headers
 cp ${RIME_ROOT}/librime/src/*.h ${RIME_ROOT}/lib/headers
 
-# Set common environment for all builds
-export IPHONEOS_DEPLOYMENT_TARGET=15.0
-export EXCLUDED_ARCHS=""
 
 # Helper function to build librime for a platform
 build_librime() {
   local platform=$1
   local out_a=$2
-
+  # Set common environment for all builds
+  export IPHONEOS_DEPLOYMENT_TARGET=15.0
+  export EXCLUDED_ARCHS=""
   export PLATFORM=$platform
   rm -rf ${RIME_ROOT}/librime/build ${RIME_ROOT}/librime/dist
   make xcode/ios/dist
