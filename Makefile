@@ -33,6 +33,8 @@ librime-check:
 	@[ -f `which cmake` ] || { echo "Install cmake first"; exit 1; }
 
 librime-build: librime-check
+	export IPHONEOS_DEPLOYMENT_TARGET=15.0
+	export EXCLUDED_ARCHS=""  # 根据需要排除模拟器 arm64
 	git submodule update --init
 	${mkfile_dir}/librimeBuild.sh
 

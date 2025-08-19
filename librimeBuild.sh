@@ -58,10 +58,6 @@ make xcode/ios/deps
 rm -rf ${RIME_ROOT}/lib && mkdir -p ${RIME_ROOT}/lib ${RIME_ROOT}/lib/headers
 cp ${RIME_ROOT}/librime/src/*.h ${RIME_ROOT}/lib/headers
 
-# 设置 Deployment Target
-export IPHONEOS_DEPLOYMENT_TARGET=15.0
-export EXCLUDED_ARCHS=""
-
 # librime build
 
 # PLATFORM value means
